@@ -8,7 +8,7 @@ ConfigFile := A_ScriptDir "\config.ini"
 
 if !FileExist(ConfigFile) {
     IniWrite, \\.\DISPLAY3\Monitor0, %ConfigFile%, Settings, TargetID
-    IniWrite, F:\Documents\Outils\Nirsoft\NirSoft\controlmymonitor.exe, %ConfigFile%, Settings, PathToControl
+    IniWrite, C:\Path\To\controlmymonitor.exe, %ConfigFile%, Settings, PathToControl
     IniWrite, 5, %ConfigFile%, Settings, DimBrightness
     IniWrite, 100, %ConfigFile%, Settings, BrightBrightness
 }
