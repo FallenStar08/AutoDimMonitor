@@ -49,11 +49,15 @@ Global CurrentState := ""
 
 ; Hooks for Window Events
 ; 0x800B = EVENT_OBJECT_LOCATIONCHANGE, 0x0001 = CREATE, 0x0002 = DESTROY
-DllCall("SetWinEventHook", "UInt", 0x800B, "UInt", 0x800B, "Ptr", 0, "Ptr", RegisterCallback("UpdateMonitor"), "UInt", 0, "UInt", 0, "UInt", 0)
-DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", RegisterCallback("UpdateMonitor"), "UInt", 0, "UInt", 0, "UInt", 0)
+DllCall("SetWinEventHook", "UInt", 0x800B, "UInt", 0x800B, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
+DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 
 UpdateMonitor()
 return
+
+EventTimer() {
+    SetTimer, UpdateMonitor, -100
+}
 
 UpdateMonitor() {
     global
