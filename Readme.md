@@ -11,6 +11,8 @@ When a window is moved onto it, it restores full brightness.
 - **Event-Driven:** Uses WinEventHooks (no stinky timers).
 - **Portable:** Configurable via `.ini` file.
 - **Lightweight:** Tiny footprint, runs in the background.
+- **Blacklist:** Ignore specific windows (like overlays or system tools) that shouldn't trigger brightness.
+- **Debug Mode:** On-screen overlay to see exactly which windows are being detected.
 
 ## Prerequisites
 
@@ -32,5 +34,7 @@ When a window is moved onto it, it restores full brightness.
 TargetID=\\.\DISPLAY3\Monitor0
 PathToControl=C:\Path\To\controlmymonitor.exe
 DimBrightness=5
-BrightBrightness=100
+BrightBrightness=80
+Debug=0
+Blacklist=NVIDIA Container,Overwolf
 ```
