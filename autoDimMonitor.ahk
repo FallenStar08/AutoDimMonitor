@@ -22,9 +22,9 @@ IniRead, BrightBrightness, %ConfigFile%, Settings, BrightBrightness
 IniRead, DebugMode, %ConfigFile%, Settings, Debug, 0
 IniRead, BlacklistRaw, %ConfigFile%, Settings, Blacklist, %A_Space%
 
-Global Blacklist := []
+Global Blacklist := {}
 Loop, parse, BlacklistRaw, `,
-    Blacklist.Push(Trim(A_LoopField))
+    Blacklist[Trim(A_LoopField)] := 1
 
 RegExMatch(TargetID, "DISPLAY\d+", SearchName)
 
@@ -78,14 +78,7 @@ UpdateMonitor() {
 
         if ((Style & 0x10000000) && class != "tooltips_class32")
         {
-            IsBlacklisted := 0
-            for each, item in Blacklist {
-                if (Title = item) {
-                    IsBlacklisted := 1
-                    break
-                }
-            }
-            if (IsBlacklisted)
+            if (Blacklist.HasKey(Title))
                 continue
 
             WinGetPos, WX, WY, WW, WH, ahk_id %this_id%
