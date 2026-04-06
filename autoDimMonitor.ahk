@@ -4,6 +4,14 @@
 SetBatchLines, -1
 ListLines Off
 
+; --- TRAY MENU ---
+Menu, Tray, NoStandard
+Menu, Tray, Add, Settings, ShowGui
+Menu, Tray, Add, Reload, GuiReload
+Menu, Tray, Add, Exit, GuiExit
+Menu, Tray, Default, Settings
+
+; --- INITIAL LOAD ---
 ConfigFile := A_ScriptDir "\config.ini"
 
 if !FileExist(ConfigFile) {
@@ -55,6 +63,7 @@ DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", Regi
 UpdateMonitor()
 return
 
+; --- CORE FUNCTIONS ---
 EventTimer() {
     SetTimer, UpdateMonitor, -100
 }
@@ -108,5 +117,69 @@ UpdateMonitor() {
         CurrentState := "Dim"
     }
 }
+
+; --- GUI & TRAY HANDLERS ---
+ShowGui:
+    MonList := ""
+    SysGet, MC, MonitorCount
+    Loop, %MC% {
+        SysGet, MName, MonitorName, %A_Index%
+        FullID := MName . "\Monitor0"
+        MonList .= FullID . "|"
+        if (FullID = TargetID)
+            SelectedMon := A_Index
+    }
+
+    Gui, Settings:New, +AlwaysOnTop, Monitor Settings
+    Gui, Margin, 15, 15
+    Gui, Add, Text,, Select Target Monitor:
+    Gui, Add, DropDownList, vGuiTargetID Choose%SelectedMon% w250, %MonList%
+    Gui, Add, Text, y+15, Brightness (Active):
+    Gui, Add, Slider, vGuiBright Range0-100 ToolTip gSliderMove w200, %BrightBrightness%
+    Gui, Add, Edit, vEditBright x+10 yp-3 w40 Limit3 gEditMove, %BrightBrightness%
+    Gui, Add, Text, xm y+15, Brightness (Dim):
+    Gui, Add, Slider, vGuiDim Range0-100 ToolTip gSliderMove w200, %DimBrightness%
+    Gui, Add, Edit, vEditDim x+10 yp-3 w40 Limit3 gEditMove, %DimBrightness%
+    Gui, Add, Checkbox, xm y+15 vGuiDebug Checked%DebugMode%, Enable Debug Tooltip
+    Gui, Add, Button, xm y+20 Default gSaveSettings w100 h30, Save
+    Gui, Add, Button, x+10 yp w100 h30 gGuiClose, Cancel
+    Gui, Show
+return
+
+SliderMove:
+    Gui, Settings:Submit, NoHide
+    GuiControl, Settings:, EditBright, %GuiBright%
+    GuiControl, Settings:, EditDim, %GuiDim%
+return
+
+EditMove:
+    Gui, Settings:Submit, NoHide
+    if (EditBright ~= "^\d+$")
+        GuiControl, Settings:, GuiBright, %EditBright%
+    if (EditDim ~= "^\d+$")
+        GuiControl, Settings:, GuiDim, %EditDim%
+return
+
+SaveSettings:
+    Gui, Settings:Submit
+    IniWrite, %GuiTargetID%, %ConfigFile%, Settings, TargetID
+    IniWrite, %EditBright%, %ConfigFile%, Settings, BrightBrightness
+    IniWrite, %EditDim%, %ConfigFile%, Settings, DimBrightness
+    IniWrite, %GuiDebug%, %ConfigFile%, Settings, Debug
+    Reload
+return
+
+GuiReload:
+    Reload
+return
+
+GuiExit:
+ExitApp
+return
+
+SettingsGuiClose:
+GuiClose:
+    Gui, Settings:Destroy
+return
 
 ^!r::Reload
