@@ -18,8 +18,15 @@ Menu, Tray, Default, Settings
 ConfigFile := A_ScriptDir "\config.ini"
 
 if !FileExist(ConfigFile) {
+    MsgBox, 64, Initial Setup, Please select your ControlMyMonitor.exe file.
+    FileSelectFile, InitialPath, 3, , Select ControlMyMonitor.exe, Executables (*.exe)
+    if (InitialPath = "") {
+        MsgBox, 48, Warning, Path not set. Script may not function correctly.
+        InitialPath := "C:\Path\To\controlmymonitor.exe"
+    }
+    
     IniWrite, 3, %ConfigFile%, Settings, TargetDisplayNum
-    IniWrite, C:\Path\To\controlmymonitor.exe, %ConfigFile%, Settings, PathToControl
+    IniWrite, %InitialPath%, %ConfigFile%, Settings, PathToControl
     IniWrite, 5, %ConfigFile%, Settings, DimBrightness
     IniWrite, 80, %ConfigFile%, Settings, BrightBrightness
     IniWrite, 0, %ConfigFile%, Settings, Debug
@@ -102,12 +109,14 @@ UpdateMonitor() {
     if (HasWindow && CurrentState != "Bright") {
         BroadcastBrightness(BrightBrightness)
         CurrentState := "Bright"
-        Menu, Tray, Icon, %brightIconPath%
+        if FileExist(brightIconPath)
+            Menu, Tray, Icon, %brightIconPath%
     }
     else if (!HasWindow && CurrentState != "Dim") {
         BroadcastBrightness(DimBrightness)
         CurrentState := "Dim"
-        Menu, Tray, Icon, %dimIconPath%
+        if FileExist(dimIconPath)
+            Menu, Tray, Icon, %dimIconPath%
     }
 }
 
@@ -129,18 +138,33 @@ ShowGui:
 
     Gui, Settings:New, +AlwaysOnTop, Monitor Settings
     Gui, Margin, 15, 15
-    Gui, Add, Text,, Select Target Display Number:
+    
+    Gui, Add, Text,, ControlMyMonitor.exe Path:
+    Gui, Add, Edit, vGuiPathToControl w200 r1, %PathToControl%
+    Gui, Add, Button, x+5 yp-1 w45 gBrowseExe, ...
+
+    Gui, Add, Text, xm y+15, Select Target Display Number:
     Gui, Add, DropDownList, vGuiDispNum Choose%TargetDisplayNum% w250, %MonList%
+    
     Gui, Add, Text, y+15, Brightness (Active):
     Gui, Add, Slider, vGuiBright Range0-100 ToolTip gSliderMove w200, %BrightBrightness%
     Gui, Add, Edit, vEditBright x+10 yp-3 w40 Limit3 gEditMove, %BrightBrightness%
+    
     Gui, Add, Text, xm y+15, Brightness (Dim):
     Gui, Add, Slider, vGuiDim Range0-100 ToolTip gSliderMove w200, %DimBrightness%
     Gui, Add, Edit, vEditDim x+10 yp-3 w40 Limit3 gEditMove, %DimBrightness%
+    
     Gui, Add, Checkbox, xm y+15 vGuiDebug Checked%DebugMode%, Enable Debug Tooltip
+    
     Gui, Add, Button, xm y+20 Default gSaveSettings w100 h30, Save
     Gui, Add, Button, x+10 yp w100 h30 gGuiClose, Cancel
     Gui, Show
+return
+
+BrowseExe:
+    FileSelectFile, NewPath, 3, , Select ControlMyMonitor.exe, Executables (*.exe)
+    if (NewPath != "")
+        GuiControl, Settings:, GuiPathToControl, %NewPath%
 return
 
 SliderMove:
@@ -159,9 +183,9 @@ return
 
 SaveSettings:
     Gui, Settings:Submit
-    ; Extract the digit from "Monitor X"
     RegExMatch(GuiDispNum, "\d+", NewDispNum)
     IniWrite, %NewDispNum%, %ConfigFile%, Settings, TargetDisplayNum
+    IniWrite, %GuiPathToControl%, %ConfigFile%, Settings, PathToControl
     IniWrite, %EditBright%, %ConfigFile%, Settings, BrightBrightness
     IniWrite, %EditDim%, %ConfigFile%, Settings, DimBrightness
     IniWrite, %GuiDebug%, %ConfigFile%, Settings, Debug
