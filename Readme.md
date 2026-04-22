@@ -41,3 +41,5 @@ Blacklist=Program Manager,NVIDIA Container
 ; The display number to monitor (e.g. 3 for display 3)
 TargetDisplayNum=3
 ```
+
+Icon made by <a href="https://www.flaticon.com/authors/design-circle" title="Design Circle">Design Circle</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a>

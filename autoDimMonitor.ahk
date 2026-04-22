@@ -4,6 +4,9 @@
 SetBatchLines, -1
 ListLines Off
 
+;Icon
+Menu, Tray, Icon, %A_ScriptDir%\dim.ico
+
 ; --- TRAY MENU ---
 Menu, Tray, NoStandard
 Menu, Tray, Add, Settings, ShowGui
@@ -34,7 +37,6 @@ Global Blacklist := {}
 Loop, parse, BlacklistRaw, `,
     Blacklist[Trim(A_LoopField)] := 1
 
-
 Global TargetIndex := 0
 SysGet, MonCount, MonitorCount
 Loop, %MonCount% {
@@ -44,7 +46,6 @@ Loop, %MonCount% {
         Break
     }
 }
-
 
 if (TargetIndex = 0)
     TargetIndex := 1
@@ -101,10 +102,12 @@ UpdateMonitor() {
     if (HasWindow && CurrentState != "Bright") {
         BroadcastBrightness(BrightBrightness)
         CurrentState := "Bright"
+        Menu, Tray, Icon, %A_ScriptDir%\bright.ico
     }
     else if (!HasWindow && CurrentState != "Dim") {
         BroadcastBrightness(DimBrightness)
         CurrentState := "Dim"
+        Menu, Tray, Icon, %A_ScriptDir%\dim.ico
     }
 }
 
