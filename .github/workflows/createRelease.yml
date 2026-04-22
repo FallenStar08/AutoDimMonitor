@@ -1,27 +1,37 @@
 name: Create Release Asset
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    push:
+        tags:
+            - "v*"
+    workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-latest # We use Windows to match your AHK environment
+    build:
+        runs-on: windows-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+            - name: Create Zip Archive
+              shell: pwsh
+              run: |
+                  $compressPath = Join-Path $env:GITHUB_WORKSPACE "autoDimMonitor.ahk"
+                  $resPath = Join-Path $env:GITHUB_WORKSPACE "resources"
+                  $destPath = Join-Path $env:GITHUB_WORKSPACE "autoDimMonitor.zip"
 
-      - name: Create Zip Archive
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "autoDimMonitor.ahk", "resources" -DestinationPath "autoDimMonitor.zip"
+                  Compress-Archive -Path $compressPath, $resPath -DestinationPath $destPath
 
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: MonitorTool.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  ls autoDimMonitor.zip
+
+            - name: Upload Release Asset
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: autoDimMonitor.zip
+                  tag_name: ${{ github.ref_name }}
+                  draft: false
+                  prerelease: false
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
