@@ -21,11 +21,11 @@ When a window is moved onto it, it restores full brightness.
 
 ## Installation
 
-1. Download `ControlMyMonitor.exe` and note its file path.
-2. Run `ControlMyMonitor.exe` to find your target monitor's ID (e.g., `\\.\DISPLAY3\Monitor0`).
-3. Download the resources files and the script file (autoDimMonitor.ahk) in a folder.
-4. Run `autoDimMonitor.ahk`. You can also add it to your startup folder to make it run at startup.
-5. Left click the tray icon to edit the settings. Edit the fields you want to change and click save. The script will restart with the new settings.
+1. **Download the latest version:** Get the `autoDimMonitor.zip` from the [Latest Release](https://github.com/FallenStar08/AutoDimMonitor/releases).
+2. **Setup ControlMyMonitor:** Download `ControlMyMonitor.exe` from [NirSoft](https://www.nirsoft.net/utils/control_my_monitor.html) and note its file path.
+3. **Extract:** Unzip the files into a folder of your choice.
+4. **Run:** Launch `autoDimMonitor.ahk` (Requires AutoHotkey v1.1).
+5. **Configure:** Right-click the tray icon and select **Settings** to set your monitor number and the path to `controlmymonitor.exe`.
 
 ## Settings Menu
 
