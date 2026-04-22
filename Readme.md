@@ -23,12 +23,13 @@ When a window is moved onto it, it restores full brightness.
 
 1. Download `ControlMyMonitor.exe` and note its file path.
 2. Run `ControlMyMonitor.exe` to find your target monitor's ID (e.g., `\\.\DISPLAY3\Monitor0`).
-3. Run `autoDimMonitor.ahk`. You can also add it to your startup folder to make it run at startup.
-4. Left click the tray icon to edit the settings. Edit the fields you want to change and click save. The script will restart with the new settings.
+3. Download the resources files and the script file (autoDimMonitor.ahk) in a folder.
+4. Run `autoDimMonitor.ahk`. You can also add it to your startup folder to make it run at startup.
+5. Left click the tray icon to edit the settings. Edit the fields you want to change and click save. The script will restart with the new settings.
 
 ## Settings Menu
 
-![Settings Menu](./config.png)
+![Settings Menu](./readmeAssets/config.png)
 
 ## Configuration (`config.ini`)
 

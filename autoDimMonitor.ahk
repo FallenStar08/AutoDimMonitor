@@ -4,8 +4,8 @@
 SetBatchLines, -1
 ListLines Off
 
-;Icon
-Menu, Tray, Icon, %A_ScriptDir%\dim.ico
+dimIconPath := A_ScriptDir "\resources\dim.ico"
+brightIconPath := A_ScriptDir "\resources\bright.ico"
 
 ; --- TRAY MENU ---
 Menu, Tray, NoStandard
@@ -102,12 +102,12 @@ UpdateMonitor() {
     if (HasWindow && CurrentState != "Bright") {
         BroadcastBrightness(BrightBrightness)
         CurrentState := "Bright"
-        Menu, Tray, Icon, %A_ScriptDir%\bright.ico
+        Menu, Tray, Icon, %brightIconPath%
     }
     else if (!HasWindow && CurrentState != "Dim") {
         BroadcastBrightness(DimBrightness)
         CurrentState := "Dim"
-        Menu, Tray, Icon, %A_ScriptDir%\dim.ico
+        Menu, Tray, Icon, %dimIconPath%
     }
 }
 
