@@ -26,6 +26,10 @@ When a window is moved onto it, it restores full brightness.
 3. Run `autoDimMonitor.ahk`. You can also add it to your startup folder to make it run at startup.
 4. Left click the tray icon to edit the settings. Edit the fields you want to change and click save. The script will restart with the new settings.
 
+## Settings Menu
+
+![Settings Menu](./config.png)
+
 ## Configuration (`config.ini`)
 
 ```ini
