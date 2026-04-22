@@ -23,18 +23,21 @@ When a window is moved onto it, it restores full brightness.
 
 1. Download `ControlMyMonitor.exe` and note its file path.
 2. Run `ControlMyMonitor.exe` to find your target monitor's ID (e.g., `\\.\DISPLAY3\Monitor0`).
-3. Place `autoDimMonitor.ahk` and `config.ini` in the same folder.
-4. Edit `config.ini` with your specific path, monitor ID, and preferred brightness levels.
-5. Run `autoDimMonitor.ahk`.
+3. Run `autoDimMonitor.ahk`. You can also add it to your startup folder to make it run at startup.
+4. Edit the config.ini file the script generated after the first run to your liking.
 
 ## Configuration (`config.ini`)
 
 ```ini
 [Settings]
-TargetID=\\.\DISPLAY3\Monitor0
-PathToControl=C:\Path\To\controlmymonitor.exe
+; Path to ControlMyMonitor executable
+PathToControl={pathToControlMyMonitor}\controlmymonitor.exe
+
+; Brightness levels (0-100)
 DimBrightness=5
-BrightBrightness=80
+BrightBrightness=65
 Debug=0
-Blacklist=NVIDIA Container,Overwolf
+Blacklist=Program Manager,NVIDIA Container
+; The display number to monitor (e.g. 3 for display 3)
+TargetDisplayNum=3
 ```
