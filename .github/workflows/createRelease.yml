@@ -4,12 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-latest # We use Windows to match your AHK environment
-
+    runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,11 +17,13 @@ jobs:
       - name: Create Zip Archive
         shell: pwsh
         run: |
+          # Double check these filenames match your repo exactly!
           Compress-Archive -Path "autoDimMonitor.ahk", "resources" -DestinationPath "autoDimMonitor.zip"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: MonitorTool.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
