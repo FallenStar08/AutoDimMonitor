@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,13 +18,12 @@ jobs:
       - name: Create Zip Archive
         shell: pwsh
         run: |
-          # Double check these filenames match your repo exactly!
           Compress-Archive -Path "autoDimMonitor.ahk", "resources" -DestinationPath "autoDimMonitor.zip"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
+          files: autoDimMonitor.zip
           tag_name: ${{ github.ref_name }}
-          files: MonitorTool.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
