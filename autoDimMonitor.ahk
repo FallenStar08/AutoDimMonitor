@@ -85,16 +85,17 @@ UpdateMonitor() {
             continue
         WinGet, Style, Style, ahk_id %this_id%
         WinGetClass, class, ahk_id %this_id%
+        WinGet, processName, ProcessName, ahk_id %this_id%
         if ((Style & 0x10000000) && class != "tooltips_class32")
         {
-            if (Blacklist.HasKey(Title))
+            if (Blacklist.HasKey(processName))
                 continue
             WinGetPos, WX, WY, WW, WH, ahk_id %this_id%
             if (WX+(WW/2) >= mLeft && WX+(WW/2) <= mRight && WY+(WH/2) >= mTop && WY+(WH/2) <= mBottom)
             {
                 HasWindow := 1
                 if (DebugMode)
-                    FoundWindows .= "- " . Title . "`n"
+                    FoundWindows .= "- " . processName . " (" . Title . ")`n"
                 else
                     break
             }
@@ -130,6 +131,9 @@ BroadcastBrightness(Level) {
 
 ; --- GUI & TRAY HANDLERS ---
 ShowGui:
+    IniRead, currentBlacklist, %ConfigFile%, Settings, Blacklist, %A_Space%
+    if (currentBlacklist = " " || currentBlacklist = "")
+        currentBlacklist := ""
     MonList := ""
     SysGet, MC, MonitorCount
     Loop, %MC% {
@@ -155,6 +159,11 @@ ShowGui:
     Gui, Add, Edit, vEditDim x+10 yp-3 w40 Limit3 gEditMove, %DimBrightness%
     
     Gui, Add, Checkbox, xm y+15 vGuiDebug Checked%DebugMode%, Enable Debug Tooltip
+    
+    Gui, Add, Text, xm y+15, Blacklisted Processes:
+    Gui, Add, ListBox, vGuiBlacklist w250 r4, % StrReplace(currentBlacklist, ",", "|")
+    Gui, Add, Button, xm y+5 w120 h25 gPickBlacklist, Add (Picker)
+    Gui, Add, Button, x+10 yp w120 h25 gRemoveBlacklist, Remove Selected
     
     Gui, Add, Button, xm y+20 Default gSaveSettings w100 h30, Save
     Gui, Add, Button, x+10 yp w100 h30 gGuiClose, Cancel
@@ -190,6 +199,79 @@ SaveSettings:
     IniWrite, %EditDim%, %ConfigFile%, Settings, DimBrightness
     IniWrite, %GuiDebug%, %ConfigFile%, Settings, Debug
     Reload
+return
+
+PickBlacklist:
+    Gui, Settings:Hide
+    Hotkey, LButton, PickerClick, On
+    Hotkey, Escape, PickerCancel, On
+    SetTimer, PickerTooltip, 50
+return
+
+PickerTooltip:
+    CoordMode, Mouse, Screen
+    CoordMode, ToolTip, Screen
+    MouseGetPos, mX, mY
+    ToolTip, Click on a window to add it to the Blacklist.`nPress Esc to cancel., % mX + 15, % mY + 15, 2
+return
+
+PickerClick:
+    Hotkey, LButton, Off
+    Hotkey, Escape, Off
+    SetTimer, PickerTooltip, Off
+    ToolTip, , , , 2
+    MouseGetPos, , , clickedWinId
+    WinGet, clickedProcess, ProcessName, ahk_id %clickedWinId%
+    clickedProcess := StrReplace(clickedProcess, ",", "")
+    if (clickedProcess != "") {
+        if (!Blacklist.HasKey(clickedProcess)) {
+            Blacklist[clickedProcess] := 1
+            IniRead, currentBlacklist, %ConfigFile%, Settings, Blacklist, %A_Space%
+            if (currentBlacklist == " " || currentBlacklist == "")
+                newBlacklist := clickedProcess
+            else
+                newBlacklist := currentBlacklist . "," . clickedProcess
+            IniWrite, %newBlacklist%, %ConfigFile%, Settings, Blacklist
+            GuiControl, Settings:, GuiBlacklist, % "|" StrReplace(newBlacklist, ",", "|")
+            MsgBox, 64, Blacklist, Added "%clickedProcess%" to the blacklist!
+        } else {
+            MsgBox, 64, Blacklist, "%clickedProcess%" is already in the blacklist.
+        }
+    } else {
+        MsgBox, 48, Blacklist, No valid window selected.
+    }
+    Gui, Settings:Show
+return
+
+RemoveBlacklist:
+    Gui, Settings:Submit, NoHide
+    if (GuiBlacklist = "") {
+        MsgBox, 48, Blacklist, Please select a process to remove.
+        return
+    }
+    
+    IniRead, currentBlacklist, %ConfigFile%, Settings, Blacklist, %A_Space%
+    newBlacklist := ""
+    Loop, parse, currentBlacklist, `,
+    {
+        if (Trim(A_LoopField) != GuiBlacklist) {
+            if (newBlacklist = "")
+                newBlacklist := Trim(A_LoopField)
+            else
+                newBlacklist .= "," . Trim(A_LoopField)
+        }
+    }
+    IniWrite, %newBlacklist%, %ConfigFile%, Settings, Blacklist
+    Blacklist.Delete(GuiBlacklist)
+    GuiControl, Settings:, GuiBlacklist, % "|" StrReplace(newBlacklist, ",", "|")
+return
+
+PickerCancel:
+    Hotkey, LButton, Off
+    Hotkey, Escape, Off
+    SetTimer, PickerTooltip, Off
+    ToolTip, , , , 2
+    Gui, Settings:Show
 return
 
 GuiReload:
