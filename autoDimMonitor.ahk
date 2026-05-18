@@ -22,7 +22,7 @@ if !FileExist(ConfigFile) {
     IniWrite, 5, %ConfigFile%, Settings, DimBrightness
     IniWrite, 80, %ConfigFile%, Settings, BrightBrightness
     IniWrite, 0, %ConfigFile%, Settings, Debug
-    IniWrite, NVIDIA Container`,Overwolf, %ConfigFile%, Settings, Blacklist
+    IniWrite, Rainmeter.exe, %ConfigFile%, Settings, Blacklist
 }
 
 IniRead, TargetDisplayNum, %ConfigFile%, Settings, TargetDisplayNum

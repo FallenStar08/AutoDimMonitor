@@ -9,6 +9,7 @@ When a window is moved onto it, it restores full brightness.
 ## Features
 
 - **Event-Driven:** Uses WinEventHooks (no stinky timers).
+- **Brightness Control:** Uses native Windows API (no external tools).
 - **Portable:** Configurable via `.ini` file.
 - **Lightweight:** Tiny footprint, runs in the background.
 - **Blacklist:** Ignore specific windows (like overlays or system tools) that shouldn't trigger brightness.
@@ -17,15 +18,13 @@ When a window is moved onto it, it restores full brightness.
 ## Prerequisites
 
 - [AutoHotkey v1.1+](https://www.autohotkey.com/)
-- [ControlMyMonitor](https://www.nirsoft.net/utils/control_my_monitor.html) by NirSoft.
 
 ## Installation
 
 1. **Download the latest version:** Get the `autoDimMonitor.zip` from the [Latest Release](https://github.com/FallenStar08/AutoDimMonitor/releases).
-2. **Setup ControlMyMonitor:** Download `ControlMyMonitor.exe` from [NirSoft](https://www.nirsoft.net/utils/control_my_monitor.html) and note its file path.
-3. **Extract:** Unzip the files into a folder of your choice.
-4. **Run:** Launch `autoDimMonitor.ahk` (Requires AutoHotkey v1.1).
-5. **Configure:** Right-click the tray icon and select **Settings** to set your monitor number and the path to `controlmymonitor.exe`.
+2. **Extract:** Unzip the files into a folder of your choice.
+3. **Run:** Launch `autoDimMonitor.ahk` (Requires AutoHotkey v1.1).
+4. **Configure:** Right-click the tray icon and select **Settings** to set your monitor number.
 
 ## Settings Menu
 
@@ -35,14 +34,11 @@ When a window is moved onto it, it restores full brightness.
 
 ```ini
 [Settings]
-; Path to ControlMyMonitor executable
-PathToControl={pathToControlMyMonitor}\controlmymonitor.exe
-
 ; Brightness levels (0-100)
 DimBrightness=5
 BrightBrightness=65
 Debug=0
-Blacklist=Program Manager,NVIDIA Container
+Blacklist=Rainmeter.exe
 ; The display number to monitor (e.g. 3 for display 3)
 TargetDisplayNum=3
 ```
