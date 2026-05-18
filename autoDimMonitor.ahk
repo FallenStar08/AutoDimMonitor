@@ -18,15 +18,7 @@ Menu, Tray, Default, Settings
 ConfigFile := A_ScriptDir "\config.ini"
 
 if !FileExist(ConfigFile) {
-    MsgBox, 64, Initial Setup, Please select your ControlMyMonitor.exe file.
-    FileSelectFile, InitialPath, 3, , Select ControlMyMonitor.exe, Executables (*.exe)
-    if (InitialPath = "") {
-        MsgBox, 48, Warning, Path not set. Script may not function correctly.
-        InitialPath := "C:\Path\To\controlmymonitor.exe"
-    }
-    
-    IniWrite, 3, %ConfigFile%, Settings, TargetDisplayNum
-    IniWrite, %InitialPath%, %ConfigFile%, Settings, PathToControl
+    IniWrite, 1, %ConfigFile%, Settings, TargetDisplayNum
     IniWrite, 5, %ConfigFile%, Settings, DimBrightness
     IniWrite, 80, %ConfigFile%, Settings, BrightBrightness
     IniWrite, 0, %ConfigFile%, Settings, Debug
@@ -34,7 +26,6 @@ if !FileExist(ConfigFile) {
 }
 
 IniRead, TargetDisplayNum, %ConfigFile%, Settings, TargetDisplayNum
-IniRead, PathToControl, %ConfigFile%, Settings, PathToControl
 IniRead, DimBrightness, %ConfigFile%, Settings, DimBrightness
 IniRead, BrightBrightness, %ConfigFile%, Settings, BrightBrightness
 IniRead, DebugMode, %ConfigFile%, Settings, Debug, 0
@@ -61,11 +52,26 @@ SysGet, Mon, Monitor, %TargetIndex%
 Global mLeft := MonLeft, mTop := MonTop, mRight := MonRight, mBottom := MonBottom
 Global CurrentState := ""
 
+; Get the Win32 monitor handle for our specific target AHK Index
+Global hTargetMonitor := 0
+DllCall("User32\EnumDisplayMonitors", "Ptr", 0, "Ptr", 0, "Ptr", RegisterCallback("GetTargetMonitorHandle", "F"), "Ptr", 0)
+
 DllCall("SetWinEventHook", "UInt", 0x800B, "UInt", 0x800B, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 
 UpdateMonitor()
 return
+
+; --- ENUMERATION CALLBACK TO CACHE THE TARGET HANDLE ---
+GetTargetMonitorHandle(hMonitor, hDC, pRect, lParam) {
+    static currentEnumIndex := 0
+    currentEnumIndex++
+    if (currentEnumIndex = TargetIndex) {
+        hTargetMonitor := hMonitor
+        return UpdateMonitor()
+    }
+    return 1
+}
 
 ; --- CORE FUNCTIONS ---
 EventTimer() {
@@ -122,10 +128,23 @@ UpdateMonitor() {
 }
 
 BroadcastBrightness(Level) {
-    global PathToControl, TargetDisplayNum
-    Loop, 2 {
-        Idx := A_Index - 1
-        Run, "%PathToControl%" /SetValue "\\.\DISPLAY%TargetDisplayNum%\Monitor%Idx%" 10 %Level%, , Hide
+    global hTargetMonitor
+    if (!hTargetMonitor)
+        return
+
+    if !DllCall("dxva2\GetNumberOfPhysicalMonitorsFromHMONITOR", "Ptr", hTargetMonitor, "UInt*", numMonitors)
+        return
+
+    structSize := A_PtrSize + 256
+    VarSetCapacity(PHYSICAL_MONITORS, numMonitors * structSize, 0)
+
+    if DllCall("dxva2\GetPhysicalMonitorsFromHMONITOR", "Ptr", hTargetMonitor, "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS) {
+        Loop, %numMonitors% {
+            hPhysicalMonitor := NumGet(PHYSICAL_MONITORS, (A_Index - 1) * structSize, "Ptr")
+
+            DllCall("dxva2\SetMonitorBrightness", "Ptr", hPhysicalMonitor, "UInt", Level)
+        }
+        DllCall("dxva2\DestroyPhysicalMonitors", "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS)
     }
 }
 
@@ -142,38 +161,28 @@ ShowGui:
 
     Gui, Settings:New, +AlwaysOnTop, Monitor Settings
     Gui, Margin, 15, 15
-    
-    Gui, Add, Text,, ControlMyMonitor.exe Path:
-    Gui, Add, Edit, vGuiPathToControl w200 r1, %PathToControl%
-    Gui, Add, Button, x+5 yp-1 w45 gBrowseExe, ...
 
     Gui, Add, Text, xm y+15, Select Target Display Number:
     Gui, Add, DropDownList, vGuiDispNum Choose%TargetDisplayNum% w250, %MonList%
-    
+
     Gui, Add, Text, y+15, Brightness (Active):
     Gui, Add, Slider, vGuiBright Range0-100 ToolTip gSliderMove w200, %BrightBrightness%
     Gui, Add, Edit, vEditBright x+10 yp-3 w40 Limit3 gEditMove, %BrightBrightness%
-    
+
     Gui, Add, Text, xm y+15, Brightness (Dim):
     Gui, Add, Slider, vGuiDim Range0-100 ToolTip gSliderMove w200, %DimBrightness%
     Gui, Add, Edit, vEditDim x+10 yp-3 w40 Limit3 gEditMove, %DimBrightness%
-    
+
     Gui, Add, Checkbox, xm y+15 vGuiDebug Checked%DebugMode%, Enable Debug Tooltip
-    
+
     Gui, Add, Text, xm y+15, Blacklisted Processes:
     Gui, Add, ListBox, vGuiBlacklist w250 r4, % StrReplace(currentBlacklist, ",", "|")
     Gui, Add, Button, xm y+5 w120 h25 gPickBlacklist, Add (Picker)
     Gui, Add, Button, x+10 yp w120 h25 gRemoveBlacklist, Remove Selected
-    
+
     Gui, Add, Button, xm y+20 Default gSaveSettings w100 h30, Save
     Gui, Add, Button, x+10 yp w100 h30 gGuiClose, Cancel
     Gui, Show
-return
-
-BrowseExe:
-    FileSelectFile, NewPath, 3, , Select ControlMyMonitor.exe, Executables (*.exe)
-    if (NewPath != "")
-        GuiControl, Settings:, GuiPathToControl, %NewPath%
 return
 
 SliderMove:
@@ -194,7 +203,6 @@ SaveSettings:
     Gui, Settings:Submit
     RegExMatch(GuiDispNum, "\d+", NewDispNum)
     IniWrite, %NewDispNum%, %ConfigFile%, Settings, TargetDisplayNum
-    IniWrite, %GuiPathToControl%, %ConfigFile%, Settings, PathToControl
     IniWrite, %EditBright%, %ConfigFile%, Settings, BrightBrightness
     IniWrite, %EditDim%, %ConfigFile%, Settings, DimBrightness
     IniWrite, %GuiDebug%, %ConfigFile%, Settings, Debug
@@ -249,7 +257,7 @@ RemoveBlacklist:
         MsgBox, 48, Blacklist, Please select a process to remove.
         return
     }
-    
+
     IniRead, currentBlacklist, %ConfigFile%, Settings, Blacklist, %A_Space%
     newBlacklist := ""
     Loop, parse, currentBlacklist, `,
