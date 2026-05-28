@@ -59,8 +59,19 @@ DllCall("User32\EnumDisplayMonitors", "Ptr", 0, "Ptr", 0, "Ptr", RegisterCallbac
 DllCall("SetWinEventHook", "UInt", 0x800B, "UInt", 0x800B, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 
+; Catch sleep/wake events to fix stale monitor handles
+OnMessage(0x218, "WM_POWERBROADCAST")
+
 UpdateMonitor()
 return
+
+WM_POWERBROADCAST(wParam, lParam) {
+    if (wParam = 0x0012) { ; PBT_APMRESUMEAUTOMATIC
+        Sleep, 1500
+        Reload
+    }
+    return 1
+}
 
 ; --- ENUMERATION CALLBACK TO CACHE THE TARGET HANDLE ---
 GetTargetMonitorHandle(hMonitor, hDC, pRect, lParam) {
