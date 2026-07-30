@@ -19,15 +19,17 @@ ConfigFile := A_ScriptDir "\config.ini"
 
 if !FileExist(ConfigFile) {
     IniWrite, 1, %ConfigFile%, Settings, TargetDisplayNum
+    IniWrite, 1, %ConfigFile%, Settings, TargetMonitors
     IniWrite, 5, %ConfigFile%, Settings, DimBrightness
     IniWrite, 80, %ConfigFile%, Settings, BrightBrightness
     IniWrite, 0, %ConfigFile%, Settings, Debug
     IniWrite, Rainmeter.exe, %ConfigFile%, Settings, Blacklist
 }
 
-IniRead, TargetDisplayNum, %ConfigFile%, Settings, TargetDisplayNum
-IniRead, DimBrightness, %ConfigFile%, Settings, DimBrightness
-IniRead, BrightBrightness, %ConfigFile%, Settings, BrightBrightness
+IniRead, LegacyTargetDisplayNum, %ConfigFile%, Settings, TargetDisplayNum, 1
+IniRead, TargetMonitorsRaw, %ConfigFile%, Settings, TargetMonitors, %LegacyTargetDisplayNum%
+IniRead, DimBrightness, %ConfigFile%, Settings, DimBrightness, 5
+IniRead, BrightBrightness, %ConfigFile%, Settings, BrightBrightness, 80
 IniRead, DebugMode, %ConfigFile%, Settings, Debug, 0
 IniRead, BlacklistRaw, %ConfigFile%, Settings, Blacklist, %A_Space%
 
@@ -55,7 +57,6 @@ InitMonitors()
 DllCall("SetWinEventHook", "UInt", 0x800B, "UInt", 0x800B, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 
-; Catch sleep/wake events to fix stale monitor handles
 OnMessage(0x218, "WM_POWERBROADCAST")
 
 UpdateMonitor()
@@ -82,7 +83,7 @@ EnumMonitorsCallback(hMonitor, hDC, pRect, lParam) {
     return 1
 }
 
-; --- CORE FUNCTIONS ---
+; --- CORE LOGIC ---
 EventTimer() {
     SetTimer, UpdateMonitor, -100
 }
@@ -129,9 +130,9 @@ UpdateMonitor() {
 
                 SysGet, Mon, Monitor, %monIdx%
                 if (midX >= MonLeft && midX <= MonRight && midY >= MonTop && midY <= MonBottom)
-            {
-                HasWindow := 1
-                if (DebugMode)
+                {
+                    MonHasWindow[monIdx] := 1
+                    if (DebugMode)
                         FoundWindowsDebug .= "Mon " monIdx ": " processName " (" Title ")`n"
                 }
             }
@@ -210,11 +211,8 @@ ShowGui:
     IniRead, currentBlacklist, %ConfigFile%, Settings, Blacklist, %A_Space%
     if (currentBlacklist = " " || currentBlacklist = "")
         currentBlacklist := ""
-    MonList := ""
+
     SysGet, MC, MonitorCount
-    Loop, %MC% {
-        MonList .= "Monitor " . A_Index . "|"
-    }
 
     Gui, Settings:New, +AlwaysOnTop, Monitor Settings
     Gui, Margin, 15, 15
@@ -286,6 +284,60 @@ SaveSettings:
     Reload
 return
 
+; --- RUNNING APPS PICKER DIALOG ---
+ShowRunningAppsPicker:
+    Gui, AppPicker:New, +AlwaysOnTop +OwnerSettings, Select Running Application
+    Gui, Margin, 10, 10
+    Gui, Add, Text,, Select an app to add to the exclusion list:
+    Gui, Add, ListView, vAppLV w360 r10 gAppLVSelect, Process Name|Window Title
+
+    WinGet, winList, List
+    ProcessMap := {}
+    Loop, %winList% {
+        wId := winList%A_Index%
+        WinGetTitle, wTitle, ahk_id %wId%
+        WinGet, wStyle, Style, ahk_id %wId%
+        WinGetClass, wClass, ahk_id %wId%
+        WinGet, pName, ProcessName, ahk_id %wId%
+
+        if (wTitle != "" && (wStyle & 0x10000000) && wClass != "tooltips_class32" && pName != "") {
+            if (!ProcessMap.HasKey(pName)) {
+                ProcessMap[pName] := wTitle
+                LV_Add("", pName, wTitle)
+            }
+        }
+    }
+    LV_ModifyCol(1, 140)
+    LV_ModifyCol(2, 200)
+
+    Gui, Add, Button, gAddSelectedApp w110 h28 Default, Add Selected
+    Gui, Add, Button, x+10 yp gAppPickerClose w110 h28, Cancel
+    Gui, Show
+return
+
+AppLVSelect:
+    if (A_GuiEvent == "DoubleClick")
+        gosub, AddSelectedApp
+return
+
+AddSelectedApp:
+    Gui, AppPicker:Default
+    Row := LV_GetNext(0)
+    if (!Row) {
+        MsgBox, 48, Blacklist, Please select an application from the list.
+        return
+    }
+    LV_GetText(selectedProc, Row, 1)
+    Gui, AppPicker:Destroy
+    AddProcessToBlacklist(selectedProc)
+return
+
+AppPickerGuiClose:
+AppPickerClose:
+    Gui, AppPicker:Destroy
+return
+
+; --- CLICK PICKER ---
 PickBlacklist:
     Gui, Settings:Hide
     Hotkey, LButton, PickerClick, On
@@ -307,26 +359,43 @@ PickerClick:
     ToolTip, , , , 2
     MouseGetPos, , , clickedWinId
     WinGet, clickedProcess, ProcessName, ahk_id %clickedWinId%
-    clickedProcess := StrReplace(clickedProcess, ",", "")
     if (clickedProcess != "") {
-        if (!Blacklist.HasKey(clickedProcess)) {
-            Blacklist[clickedProcess] := 1
-            IniRead, currentBlacklist, %ConfigFile%, Settings, Blacklist, %A_Space%
-            if (currentBlacklist == " " || currentBlacklist == "")
-                newBlacklist := clickedProcess
-            else
-                newBlacklist := currentBlacklist . "," . clickedProcess
-            IniWrite, %newBlacklist%, %ConfigFile%, Settings, Blacklist
-            GuiControl, Settings:, GuiBlacklist, % "|" StrReplace(newBlacklist, ",", "|")
-            MsgBox, 64, Blacklist, Added "%clickedProcess%" to the blacklist!
-        } else {
-            MsgBox, 64, Blacklist, "%clickedProcess%" is already in the blacklist.
-        }
+        AddProcessToBlacklist(clickedProcess)
     } else {
         MsgBox, 48, Blacklist, No valid window selected.
     }
     Gui, Settings:Show
 return
+
+PickerCancel:
+    Hotkey, LButton, Off
+    Hotkey, Escape, Off
+    SetTimer, PickerTooltip, Off
+    ToolTip, , , , 2
+    Gui, Settings:Show
+return
+
+AddProcessToBlacklist(procName) {
+    Global ConfigFile, Blacklist
+    procName := Trim(StrReplace(procName, ",", ""))
+    if (procName = "")
+        return
+
+    if (!Blacklist.HasKey(procName)) {
+        Blacklist[procName] := 1
+        IniRead, currentBlacklist, %ConfigFile%, Settings, Blacklist, %A_Space%
+        currentBlacklist := Trim(currentBlacklist)
+        if (currentBlacklist == "" || currentBlacklist == " ")
+            newBlacklist := procName
+        else
+            newBlacklist := currentBlacklist . "," . procName
+        IniWrite, %newBlacklist%, %ConfigFile%, Settings, Blacklist
+        GuiControl, Settings:, GuiBlacklist, % "|" StrReplace(newBlacklist, ",", "|")
+        MsgBox, 64, Blacklist, Added "%procName%" to the blacklist!
+    } else {
+        MsgBox, 64, Blacklist, "%procName%" is already in the blacklist.
+    }
+}
 
 RemoveBlacklist:
     Gui, Settings:Submit, NoHide
@@ -339,24 +408,17 @@ RemoveBlacklist:
     newBlacklist := ""
     Loop, parse, currentBlacklist, `,
     {
-        if (Trim(A_LoopField) != GuiBlacklist) {
+        t := Trim(A_LoopField)
+        if (t != GuiBlacklist && t != "") {
             if (newBlacklist = "")
-                newBlacklist := Trim(A_LoopField)
+                newBlacklist := t
             else
-                newBlacklist .= "," . Trim(A_LoopField)
+                newBlacklist .= "," . t
         }
     }
     IniWrite, %newBlacklist%, %ConfigFile%, Settings, Blacklist
     Blacklist.Delete(GuiBlacklist)
     GuiControl, Settings:, GuiBlacklist, % "|" StrReplace(newBlacklist, ",", "|")
-return
-
-PickerCancel:
-    Hotkey, LButton, Off
-    Hotkey, Escape, Off
-    SetTimer, PickerTooltip, Off
-    ToolTip, , , , 2
-    Gui, Settings:Show
 return
 
 GuiReload:
