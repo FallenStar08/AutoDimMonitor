@@ -33,28 +33,24 @@ IniRead, BlacklistRaw, %ConfigFile%, Settings, Blacklist, %A_Space%
 
 Global Blacklist := {}
 Loop, parse, BlacklistRaw, `,
-    Blacklist[Trim(A_LoopField)] := 1
-
-Global TargetIndex := 0
-SysGet, MonCount, MonitorCount
-Loop, %MonCount% {
-    SysGet, Name, MonitorName, %A_Index%
-    if InStr(Name, "DISPLAY" . TargetDisplayNum) {
-        TargetIndex := A_Index
-        Break
-    }
+{
+    proc := Trim(A_LoopField)
+    if (proc != "")
+        Blacklist[proc] := 1
 }
 
-if (TargetIndex = 0)
-    TargetIndex := 1
+Global TargetMonitors := {}
+Loop, parse, TargetMonitorsRaw, `,
+{
+    monNum := Trim(A_LoopField)
+    if (monNum != "")
+        TargetMonitors[monNum] := 1
+}
 
-SysGet, Mon, Monitor, %TargetIndex%
-Global mLeft := MonLeft, mTop := MonTop, mRight := MonRight, mBottom := MonBottom
-Global CurrentState := ""
+Global MonHandles := []
+Global CurrentStates := {}
 
-; Get the Win32 monitor handle for our specific target AHK Index
-Global hTargetMonitor := 0
-DllCall("User32\EnumDisplayMonitors", "Ptr", 0, "Ptr", 0, "Ptr", RegisterCallback("GetTargetMonitorHandle", "F"), "Ptr", 0)
+InitMonitors()
 
 DllCall("SetWinEventHook", "UInt", 0x800B, "UInt", 0x800B, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
@@ -73,14 +69,16 @@ WM_POWERBROADCAST(wParam, lParam) {
     return 1
 }
 
-; --- ENUMERATION CALLBACK TO CACHE THE TARGET HANDLE ---
-GetTargetMonitorHandle(hMonitor, hDC, pRect, lParam) {
-    static currentEnumIndex := 0
-    currentEnumIndex++
-    if (currentEnumIndex = TargetIndex) {
-        hTargetMonitor := hMonitor
-        return UpdateMonitor()
-    }
+; --- MONITOR ENUMERATION ---
+InitMonitors() {
+    Global MonHandles
+    MonHandles := []
+    DllCall("User32\EnumDisplayMonitors", "Ptr", 0, "Ptr", 0, "Ptr", RegisterCallback("EnumMonitorsCallback", "F"), "Ptr", 0)
+}
+
+EnumMonitorsCallback(hMonitor, hDC, pRect, lParam) {
+    Global MonHandles
+    MonHandles.Push(hMonitor)
     return 1
 }
 
@@ -90,73 +88,121 @@ EventTimer() {
 }
 
 UpdateMonitor() {
-    global
-    HasWindow := 0
-    FoundWindows := ""
-    WinGet, id, List
-    Loop, %id%
+    Global Blacklist, TargetMonitors, MonHandles, CurrentStates, DebugMode, BrightBrightness, DimBrightness, brightIconPath, dimIconPath
+
+    SysGet, TotalMonCount, MonitorCount
+    if (MonHandles.Length() != TotalMonCount)
+        InitMonitors()
+
+    MonHasWindow := {}
+    Loop, %TotalMonCount% {
+        if (TargetMonitors.HasKey(A_Index))
+            MonHasWindow[A_Index] := 0
+    }
+
+    FoundWindowsDebug := ""
+    WinGet, idList, List
+    Loop, %idList%
     {
-        this_id := id%A_Index%
+        this_id := idList%A_Index%
         WinGetTitle, Title, ahk_id %this_id%
         if (Title = "" || InStr(Title, "DEBUG"))
             continue
+
         WinGet, Style, Style, ahk_id %this_id%
         WinGetClass, class, ahk_id %this_id%
         WinGet, processName, ProcessName, ahk_id %this_id%
+
         if ((Style & 0x10000000) && class != "tooltips_class32")
         {
             if (Blacklist.HasKey(processName))
                 continue
+
             WinGetPos, WX, WY, WW, WH, ahk_id %this_id%
-            if (WX+(WW/2) >= mLeft && WX+(WW/2) <= mRight && WY+(WH/2) >= mTop && WY+(WH/2) <= mBottom)
+            midX := WX + (WW / 2)
+            midY := WY + (WH / 2)
+
+            Loop, %TotalMonCount% {
+                monIdx := A_Index
+                if (!TargetMonitors.HasKey(monIdx))
+                    continue
+
+                SysGet, Mon, Monitor, %monIdx%
+                if (midX >= MonLeft && midX <= MonRight && midY >= MonTop && midY <= MonBottom)
             {
                 HasWindow := 1
                 if (DebugMode)
-                    FoundWindows .= "- " . processName . " (" . Title . ")`n"
-                else
-                    break
+                        FoundWindowsDebug .= "Mon " monIdx ": " processName " (" Title ")`n"
+                }
             }
         }
     }
 
-    if (DebugMode)
-        ToolTip, % "TARGET DISPLAY: " TargetDisplayNum "`nAHK INDEX: " TargetIndex "`nState: " (HasWindow ? "BRIGHT" : "DIM") "`nWindows:`n" (FoundWindows ? FoundWindows : "None"), 0, 0
-    else
-        ToolTip
+    AnyBright := 0
+    Loop, %TotalMonCount% {
+        monIdx := A_Index
+        if (!TargetMonitors.HasKey(monIdx))
+            continue
 
-    if (HasWindow && CurrentState != "Bright") {
-        BroadcastBrightness(BrightBrightness)
-        CurrentState := "Bright"
+        hasWin := MonHasWindow[monIdx]
+        prevState := CurrentStates[monIdx]
+        newState := hasWin ? "Bright" : "Dim"
+
+        if (hasWin)
+            AnyBright := 1
+
+        if (newState != prevState) {
+            targetLevel := hasWin ? BrightBrightness : DimBrightness
+            SetMonitorBrightnessByIdx(monIdx, targetLevel)
+            CurrentStates[monIdx] := newState
+        }
+    }
+
+    if (DebugMode) {
+        monListStr := JoinKeys(TargetMonitors, ",")
+        ToolTip, % "TARGET MONITORS: " monListStr "`nState: " (AnyBright ? "BRIGHT" : "DIM") "`nWindows:`n" (FoundWindowsDebug ? FoundWindowsDebug : "None"), 0, 0
+    } else {
+        ToolTip
+    }
+
+    if (AnyBright) {
         if FileExist(brightIconPath)
             Menu, Tray, Icon, %brightIconPath%
-    }
-    else if (!HasWindow && CurrentState != "Dim") {
-        BroadcastBrightness(DimBrightness)
-        CurrentState := "Dim"
+    } else {
         if FileExist(dimIconPath)
             Menu, Tray, Icon, %dimIconPath%
     }
 }
 
-BroadcastBrightness(Level) {
-    global hTargetMonitor
-    if (!hTargetMonitor)
+SetMonitorBrightnessByIdx(monIdx, Level) {
+    Global MonHandles
+    hMon := MonHandles[monIdx]
+    if (!hMon)
         return
 
-    if !DllCall("dxva2\GetNumberOfPhysicalMonitorsFromHMONITOR", "Ptr", hTargetMonitor, "UInt*", numMonitors)
+    if !DllCall("dxva2\GetNumberOfPhysicalMonitorsFromHMONITOR", "Ptr", hMon, "UInt*", numMonitors)
         return
 
     structSize := A_PtrSize + 256
     VarSetCapacity(PHYSICAL_MONITORS, numMonitors * structSize, 0)
 
-    if DllCall("dxva2\GetPhysicalMonitorsFromHMONITOR", "Ptr", hTargetMonitor, "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS) {
+    if DllCall("dxva2\GetPhysicalMonitorsFromHMONITOR", "Ptr", hMon, "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS) {
         Loop, %numMonitors% {
             hPhysicalMonitor := NumGet(PHYSICAL_MONITORS, (A_Index - 1) * structSize, "Ptr")
-
             DllCall("dxva2\SetMonitorBrightness", "Ptr", hPhysicalMonitor, "UInt", Level)
         }
         DllCall("dxva2\DestroyPhysicalMonitors", "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS)
     }
+}
+
+JoinKeys(obj, delim := ",") {
+    str := ""
+    for k, v in obj {
+        if (str != "")
+            str .= delim
+        str .= k
+    }
+    return str
 }
 
 ; --- GUI & TRAY HANDLERS ---
@@ -173,10 +219,16 @@ ShowGui:
     Gui, Settings:New, +AlwaysOnTop, Monitor Settings
     Gui, Margin, 15, 15
 
-    Gui, Add, Text, xm y+15, Select Target Display Number:
-    Gui, Add, DropDownList, vGuiDispNum Choose%TargetDisplayNum% w250, %MonList%
+    Gui, Add, Text, xm y+10, Target Display(s):
+    Loop, %MC% {
+        chkVal := TargetMonitors.HasKey(A_Index) ? 1 : 0
+        if (A_Index == 1)
+            Gui, Add, Checkbox, vGuiMon_%A_Index% Checked%chkVal% xm y+5, Monitor %A_Index%
+        else
+            Gui, Add, Checkbox, vGuiMon_%A_Index% Checked%chkVal% x+15 yp, Monitor %A_Index%
+    }
 
-    Gui, Add, Text, y+15, Brightness (Active):
+    Gui, Add, Text, xm y+15, Brightness (Active):
     Gui, Add, Slider, vGuiBright Range0-100 ToolTip gSliderMove w200, %BrightBrightness%
     Gui, Add, Edit, vEditBright x+10 yp-3 w40 Limit3 gEditMove, %BrightBrightness%
 
@@ -187,12 +239,13 @@ ShowGui:
     Gui, Add, Checkbox, xm y+15 vGuiDebug Checked%DebugMode%, Enable Debug Tooltip
 
     Gui, Add, Text, xm y+15, Blacklisted Processes:
-    Gui, Add, ListBox, vGuiBlacklist w250 r4, % StrReplace(currentBlacklist, ",", "|")
-    Gui, Add, Button, xm y+5 w120 h25 gPickBlacklist, Add (Picker)
-    Gui, Add, Button, x+10 yp w120 h25 gRemoveBlacklist, Remove Selected
+    Gui, Add, ListBox, vGuiBlacklist w260 r4, % StrReplace(currentBlacklist, ",", "|")
+    Gui, Add, Button, xm y+5 w125 h25 gShowRunningAppsPicker, From Running Apps
+    Gui, Add, Button, x+10 yp w125 h25 gPickBlacklist, Click Window Picker
+    Gui, Add, Button, xm y+5 w260 h25 gRemoveBlacklist, Remove Selected
 
-    Gui, Add, Button, xm y+20 Default gSaveSettings w100 h30, Save
-    Gui, Add, Button, x+10 yp w100 h30 gGuiClose, Cancel
+    Gui, Add, Button, xm y+20 Default gSaveSettings w125 h30, Save
+    Gui, Add, Button, x+10 yp w125 h30 gGuiClose, Cancel
     Gui, Show
 return
 
@@ -212,8 +265,21 @@ return
 
 SaveSettings:
     Gui, Settings:Submit
-    RegExMatch(GuiDispNum, "\d+", NewDispNum)
-    IniWrite, %NewDispNum%, %ConfigFile%, Settings, TargetDisplayNum
+    SysGet, MC, MonitorCount
+    SelectedMons := ""
+    Loop, %MC% {
+        if (GuiMon_%A_Index%) {
+            if (SelectedMons != "")
+                SelectedMons .= ","
+            SelectedMons .= A_Index
+        }
+    }
+    if (SelectedMons == "")
+        SelectedMons := "1"
+
+    RegExMatch(SelectedMons, "^\d+", FirstMon)
+    IniWrite, %FirstMon%, %ConfigFile%, Settings, TargetDisplayNum
+    IniWrite, %SelectedMons%, %ConfigFile%, Settings, TargetMonitors
     IniWrite, %EditBright%, %ConfigFile%, Settings, BrightBrightness
     IniWrite, %EditDim%, %ConfigFile%, Settings, DimBrightness
     IniWrite, %GuiDebug%, %ConfigFile%, Settings, Debug
