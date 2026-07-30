@@ -30,17 +30,4 @@ When a window is moved onto it, it restores full brightness.
 
 ![Settings Menu](./readmeAssets/config.png)
 
-## Configuration (`config.ini`)
-
-```ini
-[Settings]
-; Brightness levels (0-100)
-DimBrightness=5
-BrightBrightness=65
-Debug=0
-Blacklist=Rainmeter.exe
-; The display number to monitor (e.g. 3 for display 3)
-TargetDisplayNum=3
-```
-
 Icon made by <a href="https://www.flaticon.com/authors/design-circle" title="Design Circle">Design Circle</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a>
