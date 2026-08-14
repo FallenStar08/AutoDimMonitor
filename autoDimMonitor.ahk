@@ -49,7 +49,7 @@ Loop, parse, TargetMonitorsRaw, `,
         TargetMonitors[monNum] := 1
 }
 
-Global MonHandles := []
+Global MonData := []
 Global CurrentStates := {}
 
 InitMonitors()
@@ -57,29 +57,69 @@ InitMonitors()
 DllCall("SetWinEventHook", "UInt", 0x800B, "UInt", 0x800B, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 DllCall("SetWinEventHook", "UInt", 0x0001, "UInt", 0x0002, "Ptr", 0, "Ptr", RegisterCallback("EventTimer"), "UInt", 0, "UInt", 0, "UInt", 0)
 
-OnMessage(0x218, "WM_POWERBROADCAST")
+OnMessage(0x0218, "WM_POWERBROADCAST")
+OnMessage(0x007E, "WM_DISPLAYCHANGE")
 
 UpdateMonitor()
 return
 
 WM_POWERBROADCAST(wParam, lParam) {
-    if (wParam = 0x0012) { ; PBT_APMRESUMEAUTOMATIC
-        Sleep, 1500
-        Reload
+    if (wParam = 0x0012 || wParam = 0x0007) { ; PBT_APMRESUMEAUTOMATIC / PBT_APMRESUMESUSPEND
+        SetTimer, ReInitDisplayHardware, -3000
     }
     return 1
 }
 
+WM_DISPLAYCHANGE(wParam, lParam) {
+    SetTimer, ReInitDisplayHardware, -2500
+    return 0
+}
+
+ReInitDisplayHardware:
+    InitMonitors()
+    CurrentStates := {} ; Reset cache to force re-applying brightness when DDC/CI wakes up
+    UpdateMonitor()
+return
+
 ; --- MONITOR ENUMERATION ---
 InitMonitors() {
-    Global MonHandles
-    MonHandles := []
+    Global MonData
+    MonData := []
     DllCall("User32\EnumDisplayMonitors", "Ptr", 0, "Ptr", 0, "Ptr", RegisterCallback("EnumMonitorsCallback", "F"), "Ptr", 0)
+
+    ; Sort left-to-right (then top-to-bottom) to lock index numbers to physical positions
+    Loop, % MonData.Length() - 1 {
+        i := A_Index
+        Loop, % MonData.Length() - i {
+            j := A_Index
+            if (MonData[j].Left > MonData[j+1].Left || (MonData[j].Left == MonData[j+1].Left && MonData[j].Top > MonData[j+1].Top)) {
+                tmp := MonData[j]
+                MonData[j] := MonData[j+1]
+                MonData[j+1] := tmp
+            }
+        }
+    }
 }
 
 EnumMonitorsCallback(hMonitor, hDC, pRect, lParam) {
-    Global MonHandles
-    MonHandles.Push(hMonitor)
+    Global MonData
+
+    miSize := 40 + (A_IsUnicode ? 64 : 32)
+    VarSetCapacity(mi, miSize, 0)
+    NumPut(miSize, mi, 0, "UInt")
+
+    if DllCall("User32\GetMonitorInfo", "Ptr", hMonitor, "Ptr", &mi) {
+        rLeft   := NumGet(mi, 4, "Int")
+        rTop    := NumGet(mi, 8, "Int")
+        rRight  := NumGet(mi, 12, "Int")
+        rBottom := NumGet(mi, 16, "Int")
+
+        MonData.Push({ "hMon": hMonitor
+            , "Left": rLeft
+            , "Top": rTop
+            , "Right": rRight
+            , "Bottom": rBottom })
+    }
     return 1
 }
 
@@ -89,11 +129,13 @@ EventTimer() {
 }
 
 UpdateMonitor() {
-    Global Blacklist, TargetMonitors, MonHandles, CurrentStates, DebugMode, BrightBrightness, DimBrightness, brightIconPath, dimIconPath
+    Global Blacklist, TargetMonitors, MonData, CurrentStates, DebugMode, BrightBrightness, DimBrightness, brightIconPath, dimIconPath
 
-    SysGet, TotalMonCount, MonitorCount
-    if (MonHandles.Length() != TotalMonCount)
+    TotalMonCount := MonData.Length()
+    if (TotalMonCount == 0) {
         InitMonitors()
+        TotalMonCount := MonData.Length()
+    }
 
     MonHasWindow := {}
     Loop, %TotalMonCount% {
@@ -128,8 +170,12 @@ UpdateMonitor() {
                 if (!TargetMonitors.HasKey(monIdx))
                     continue
 
-                SysGet, Mon, Monitor, %monIdx%
-                if (midX >= MonLeft && midX <= MonRight && midY >= MonTop && midY <= MonBottom)
+                mLeft   := MonData[monIdx].Left
+                mRight  := MonData[monIdx].Right
+                mTop    := MonData[monIdx].Top
+                mBottom := MonData[monIdx].Bottom
+
+                if (midX >= mLeft && midX <= mRight && midY >= mTop && midY <= mBottom)
                 {
                     MonHasWindow[monIdx] := 1
                     if (DebugMode)
@@ -154,8 +200,9 @@ UpdateMonitor() {
 
         if (newState != prevState) {
             targetLevel := hasWin ? BrightBrightness : DimBrightness
-            SetMonitorBrightnessByIdx(monIdx, targetLevel)
-            CurrentStates[monIdx] := newState
+            if SetMonitorBrightnessByIdx(monIdx, targetLevel) {
+                CurrentStates[monIdx] := newState
+            }
         }
     }
 
@@ -176,24 +223,27 @@ UpdateMonitor() {
 }
 
 SetMonitorBrightnessByIdx(monIdx, Level) {
-    Global MonHandles
-    hMon := MonHandles[monIdx]
+    Global MonData
+    hMon := MonData[monIdx].hMon
     if (!hMon)
-        return
+        return false
 
     if !DllCall("dxva2\GetNumberOfPhysicalMonitorsFromHMONITOR", "Ptr", hMon, "UInt*", numMonitors)
-        return
+        return false
 
     structSize := A_PtrSize + 256
     VarSetCapacity(PHYSICAL_MONITORS, numMonitors * structSize, 0)
 
+    success := false
     if DllCall("dxva2\GetPhysicalMonitorsFromHMONITOR", "Ptr", hMon, "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS) {
         Loop, %numMonitors% {
             hPhysicalMonitor := NumGet(PHYSICAL_MONITORS, (A_Index - 1) * structSize, "Ptr")
-            DllCall("dxva2\SetMonitorBrightness", "Ptr", hPhysicalMonitor, "UInt", Level)
+            if DllCall("dxva2\SetMonitorBrightness", "Ptr", hPhysicalMonitor, "UInt", Level)
+                success := true
         }
         DllCall("dxva2\DestroyPhysicalMonitors", "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS)
     }
+    return success
 }
 
 JoinKeys(obj, delim := ",") {
@@ -212,7 +262,7 @@ ShowGui:
     if (currentBlacklist = " " || currentBlacklist = "")
         currentBlacklist := ""
 
-    SysGet, MC, MonitorCount
+    MC := MonData.Length()
 
     Gui, Settings:New, +AlwaysOnTop, Monitor Settings
     Gui, Margin, 15, 15
@@ -263,7 +313,7 @@ return
 
 SaveSettings:
     Gui, Settings:Submit
-    SysGet, MC, MonitorCount
+    MC := MonData.Length()
     SelectedMons := ""
     Loop, %MC% {
         if (GuiMon_%A_Index%) {
