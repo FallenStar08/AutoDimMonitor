@@ -240,8 +240,27 @@ SetMonitorBrightnessByIdx(monIdx, Level) {
             hPhysicalMonitor := NumGet(PHYSICAL_MONITORS, (A_Index - 1) * structSize, "Ptr")
             if DllCall("dxva2\SetMonitorBrightness", "Ptr", hPhysicalMonitor, "UInt", Level)
                 success := true
+            ; Fallback: raw DDC/CI VCP code 0x10 (luminance), works when the high-level API fails
+            else if DllCall("dxva2\SetVCPFeature", "Ptr", hPhysicalMonitor, "UChar", 0x10, "UInt", Level)
+                success := true
         }
         DllCall("dxva2\DestroyPhysicalMonitors", "UInt", numMonitors, "Ptr", &PHYSICAL_MONITORS)
+    }
+
+    ; Fallback for internal/laptop panels: WMI brightness (no DDC/CI)
+    if (!success)
+        success := SetBrightnessWmi(Level)
+    return success
+}
+
+SetBrightnessWmi(Level) {
+    success := false
+    try {
+        wmi := ComObjGet("winmgmts:\\.\root\WMI")
+        for obj in wmi.ExecQuery("SELECT * FROM WmiMonitorBrightnessMethods WHERE Active=TRUE") {
+            obj.WmiSetBrightness(1, Level)
+            success := true
+        }
     }
     return success
 }
